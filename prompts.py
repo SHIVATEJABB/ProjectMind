@@ -123,15 +123,14 @@ Avoid unnecessary elaboration.
 
 2. TREAT CHAT AS EVIDENCE: Treat the conversation records strictly as source evidence from which to reconstruct the work. Extract every completed activity. Ignore greetings, small talk, scheduling messages, calendar discussions, and meeting links unless they resulted in actual discussed project outcomes. Extract only meaningful project work.
 3. DELIVERABLE CONSOLIDATION: Group and combine related activities and actions into broader, professional business deliverables.
-4. EXPAND WITH PROFESSIONAL BUSINESS/CONSULTANT LANGUAGE: Do not write simple one-sentence descriptions for a deliverable. Instead, expand each deliverable into professional consultant language detailing the business outcomes.
-   Example:
-   Instead of:
-   Updated brochure.
-   Write:
-   Developed and finalized the marketing brochure aligned with the client's communication objectives.
-   Reviewed brochure structure and messaging based on client feedback.
-   Refined visual presentation before final approval.
-5. MULTIPLE BULLET POINTS: Every category or deliverable identified in the report must contain multiple detailed bullet points whenever supported by evidence.
+4. PROFESSIONAL WRITING STYLE:
+   Write using concise professional consulting language.
+   Focus on business outcomes instead of lengthy explanations.
+   Each deliverable should be clear, specific, and concise.
+   Avoid unnecessary elaboration or repetition.
+5. CONCISE DELIVERABLES:
+   Use only the minimum number of bullet points required.
+   Prefer concise summaries over detailed activity lists.
 6. AUTO-IDENTIFY SECTIONS: Identify the type of project automatically. Create appropriate section names and headings dynamically based on the project context and work performed. Do not select headers from a predefined list.
 7. NEVER REPEAT: Never repeat the same work descriptions across sections.
 8. BANNED WORDS: Never mention the word "WhatsApp" or "AI" anywhere in the final client report. Also never use any of these phrases or words: "leveraging", "it is worth noting", "it should be noted", "comprehensive", "robust", "seamless", "cutting-edge", "transformative".
@@ -177,12 +176,12 @@ Avoid unnecessary elaboration.
    * Use formal but readable English. Active voice where possible.
    * Do not use bullet lists where prose works better.
    * Section headers must match exactly the 7 sections listed above.
-   * Client report length: minimum 250 words, maximum 400 words.
+   * Client report: 200-300 words maximum.
 {continuity_instruction}
 
 IMPORTANT OUTPUT LIMIT
 
-Your entire JSON response must remain under approximately 6000 characters.
+Your entire JSON response must remain under approximately 5000 characters.
 
 If needed:
 - shorten explanations
@@ -190,6 +189,17 @@ If needed:
 - summarize instead of expanding
 
 Never exceed this limit.
+
+FINAL RESPONSE LIMITS
+
+If the response is becoming too large:
+
+- Reduce wording.
+- Shorten explanations.
+- Never exceed 4 completed tasks.
+- Never exceed 300 words in client_report.
+- Prefer concise summaries over detailed narratives.
+
 Use EXACTLY this schema:
 
 {{
@@ -205,7 +215,7 @@ Use EXACTLY this schema:
                 "Client acknowledged completion"
             ],
             "verification_status": "Awaiting Supporting Documents",
-            "reason": "Detailed explanation of why this task is considered complete.",
+            "reason": "Concise explanation (maximum 40 words).",
             "evidence_ids": [
                 "MSG_0001"
             ]
