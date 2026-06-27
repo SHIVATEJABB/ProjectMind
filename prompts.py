@@ -98,7 +98,13 @@ Please read and analyze the project evidence carefully, following these instruct
    A concise professional overview of the period. State overall progress, key achievements, and current status. Maximum 80 words.
 
    ### 2. Completed Work & Deliverables
-   Group completed work into logical deliverables. For each deliverable include title, description, business outcome, and supporting activities. Expand using professional consulting language.
+   Group completed work into logical deliverables.
+
+For each deliverable include:
+• Title
+• One concise description (max 40 words)
+• Business outcome (one sentence) Use concise professional consulting language.
+Avoid unnecessary elaboration.
 
    ### 3. Client Decisions Received
    List explicit decisions or approvals made by the client during this period. If none, write: "No formal client decisions were recorded during this period."
@@ -150,19 +156,22 @@ Please read and analyze the project evidence carefully, following these instruct
      - "Not Verified" (supporting document does not mention the task)
      - "Awaiting Supporting Documents" (if no supporting document content is provided)
 13. CONCISENESS & SIZE LIMITS:
-   * Keep the "project_summary" under 150 words.
-   * Limit the "client_report" to 250-400 words maximum.
-   * Do NOT duplicate or repeat information between "project_summary", "completed_tasks.reason", and "client_report".
-   * Summarize outcomes in "client_report" instead of listing evidence or tasks.
-   * Never repeat information already present in "completed_tasks" inside other sections.
-   * Include at most 2 evidence IDs per completed task in "evidence_ids".
-   * Avoid repeating the same task in multiple sections.
+   * project_summary: maximum 80 words.
+   * completed_tasks: maximum 4 tasks.
+   * Each completed task reason: maximum 40 words.
+   * confidence_reason: maximum 2 bullet points.
+   * evidence_ids: maximum 2 IDs.
+   * client_report: between 200 and 300 words.
+   * pending_tasks: maximum 5.
+   * new_requests: maximum 3.
+   * Never repeat the same information between sections.
 14. PROJECT INTELLIGENCE:
-   * Reconstruct and populate the "project_intelligence" block based on project evidence.
-   * Determine "project_health": "status" must be one of "On Track", "Needs Attention", "At Risk", "Blocked", accompanied by a brief "explanation".
-   * Generate 3-5 "insights" (evidence-backed observations). For each insight, include "insight" (the statement) and a list "why" containing only the message IDs (e.g. ["MSG_0001", "MSG_0002"]) of supporting messages chronologically.
-   * Generate "potential_risks" supported by evidence. If none exist, output "No significant risks detected." as the risk text. For each risk, include "risk" (the statement) and a "why" list containing only the message IDs (e.g. ["MSG_0003"]) of supporting messages.
-   * Generate "recommended_next_steps": a list of practical evidence-based next action items.
+   * Keep this section concise.
+   * Generate exactly 3 insights.
+   * Generate at most 2 potential risks.
+   * Generate exactly 3 recommended next steps.
+   * Each insight/risk explanation must be one sentence only.
+   * Each "why" list may contain at most 2 evidence IDs.
 15. CONSULTING STYLE:
    * Write in the style of a senior project manager or consultant presenting to a client.
    * Use formal but readable English. Active voice where possible.
@@ -171,6 +180,16 @@ Please read and analyze the project evidence carefully, following these instruct
    * Client report length: minimum 250 words, maximum 400 words.
 {continuity_instruction}
 
+IMPORTANT OUTPUT LIMIT
+
+Your entire JSON response must remain under approximately 6000 characters.
+
+If needed:
+- shorten explanations
+- reduce wording
+- summarize instead of expanding
+
+Never exceed this limit.
 Use EXACTLY this schema:
 
 {{
