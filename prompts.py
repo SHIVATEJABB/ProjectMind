@@ -230,7 +230,7 @@ Use EXACTLY this schema:
         "Description of new client requirements or requests raised."
     ],
 
-    "client_report": "A complete, professional consulting-style client-ready report in markdown. Must include exactly 7 sections. Between 250 and 400 words.",
+    "client_report": "A complete, professional consulting-style client-ready report in markdown. Must include exactly 7 sections. Between 200 and 300 words.",
 
     "project_intelligence": {{
         "project_health": {{
