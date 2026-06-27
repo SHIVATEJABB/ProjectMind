@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.streamlit/secrets.toml
+last_response.txt
+reports/
+.DS_Store
+
+Archive/
+Archive.zip
+Archive 2.zip
+scratch/
+sample_chat.txt
+*.zip
