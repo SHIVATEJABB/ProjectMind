@@ -1179,4 +1179,4 @@ if st.session_state.report_data is not None:
                 mime="application/json",
                 use_container_width=True
             )
-            st.code(json_str, language="json")
+            st.code(json_str, language="json")  
