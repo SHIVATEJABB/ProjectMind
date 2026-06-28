@@ -15,3 +15,5 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+st.sidebar.image("assets/logo.png", width=80)
+st.sidebar.markdown("## ProjectMind")
