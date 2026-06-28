@@ -1,8 +1,15 @@
 import streamlit as st
-st.set_page_config(page_title="Reports", layout="wide")
+st.set_page_config(page_title="ProjectMind", page_icon="assets/favicon.png", layout="wide", initial_sidebar_state="expanded")
 
 from session import initialize_session_state
 initialize_session_state()
+
+st.markdown(
+    f"<div style='color: gray; font-size: 0.9em; margin-bottom: 10px;'>"
+    f"Reports"
+    f"</div>",
+    unsafe_allow_html=True
+)
 
 from collections import defaultdict
 import datetime
@@ -266,116 +273,126 @@ else:
                             
                         p_str = report.get("reporting_period", "")
                         
-                        col_ver_info, col_ver_actions = st.columns([1, 2])
+                        col_ver_info, col_ver_actions = st.columns([1, 4])
                         
                         with col_ver_info:
                             st.write(f"**Report v{v}**")
                             st.caption(f"Generated: {gen_d_str} | Period: {p_str}")
                             
                         with col_ver_actions:
-                            ca1, ca2, ca3, ca4, ca5, ca6 = st.columns(6)
+                            # Grouped report actions
+                            col_primary, col_export, col_danger = st.columns([3.5, 1.8, 0.7])
                             
-                            # View Details
-                            with ca1:
-                                if st.button("View Details", key=f"view_{pid}_v{v}"):
-                                    st.session_state.view_report_details = report
+                            # 1. Primary Actions (View Details, Continue, Ask Chitti)
+                            with col_primary:
+                                pca1, pca2, pca3 = st.columns(3)
+                                with pca1:
+                                    if st.button("View Details", key=f"view_{pid}_v{v}", use_container_width=True):
+                                        st.session_state.view_report_details = report
+                                        st.rerun()
+                                with pca2:
+                                    if st.button("Continue", key=f"cont_{pid}_v{v}", use_container_width=True):
+                                        st.session_state.project_name = report["project_name"]
+                                        st.session_state.client_name = report["client_name"]
+                                        st.session_state.previous_report_data = report["report_data"]
+                                        st.session_state.report_data = report["report_data"]
+                                        st.session_state.project_intelligence_engine = report.get("project_intelligence_engine")
+                                        st.session_state.active_report_meta = {
+                                            "project_id": pid,
+                                            "version": v,
+                                            "generated_date": report["generated_date"],
+                                            "reporting_period": report.get("reporting_period", "")
+                                        }
+                                        if "messages" in report:
+                                            st.session_state.messages = report["messages"]
+                                        st.session_state.entry_mode = "Continue From Existing Report"
+                                        
+                                        # Restore dates
+                                        if report.get("start_date"):
+                                            try:
+                                                st.session_state.custom_start_date = datetime.datetime.strptime(report["start_date"], "%Y-%m-%d").date()
+                                            except Exception:
+                                                pass
+                                        if report.get("end_date"):
+                                            try:
+                                                st.session_state.custom_end_date = datetime.datetime.strptime(report["end_date"], "%Y-%m-%d").date()
+                                            except Exception:
+                                                pass
+                                                
+                                        from utils import set_active_report_in_store
+                                        set_active_report_in_store(pid, v)
+                                        st.switch_page("pages/Dashboard.py")
+                                with pca3:
+                                    if st.button("Ask Chitti", key=f"ask_{pid}_v{v}", use_container_width=True):
+                                        st.session_state.report_data = report["report_data"]
+                                        st.session_state.project_name = report["project_name"]
+                                        st.session_state.client_name = report["client_name"]
+                                        st.session_state.project_intelligence_engine = report.get("project_intelligence_engine")
+                                        st.session_state.active_report_meta = {
+                                            "project_id": pid,
+                                            "version": v,
+                                            "generated_date": report["generated_date"],
+                                            "reporting_period": report.get("reporting_period", "")
+                                        }
+                                        if "messages" in report:
+                                            st.session_state.messages = report["messages"]
+                                        from utils import set_active_report_in_store
+                                        set_active_report_in_store(pid, v)
+                                        st.switch_page("pages/Ask_Chitti.py")
+                                        
+                            # 2. Export Actions (Word, Excel)
+                            with col_export:
+                                eca1, eca2 = st.columns(2)
+                                with eca1:
+                                    try:
+                                        s_dt = datetime.datetime.strptime(report.get("start_date", ""), "%Y-%m-%d").date() if report.get("start_date") else None
+                                        e_dt = datetime.datetime.strptime(report.get("end_date", ""), "%Y-%m-%d").date() if report.get("end_date") else None
+                                    except Exception:
+                                        s_dt = None
+                                        e_dt = None
+                                        
+                                    word_data = generate_word_report(
+                                        report["project_name"],
+                                        report["client_name"],
+                                        s_dt,
+                                        e_dt,
+                                        report["report_data"],
+                                        report_version=v
+                                    )
+                                    safe_p = "".join(c for c in report["project_name"] if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+                                    st.download_button(
+                                        label="Word",
+                                        data=word_data,
+                                        file_name=f"{safe_p}_Report_v{v}.docx",
+                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                        key=f"word_{pid}_v{v}",
+                                        use_container_width=True
+                                    )
+                                with eca2:
+                                    excel_data = generate_excel_report(report["report_data"], report_version=v)
+                                    st.download_button(
+                                        label="Excel",
+                                        data=excel_data,
+                                        file_name=f"{safe_p}_Timesheet_v{v}.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        key=f"excel_{pid}_v{v}",
+                                        use_container_width=True
+                                    )
+                                    
+                            # 3. Danger Action (Delete)
+                            with col_danger:
+                                if st.button("Delete", key=f"del_{pid}_v{v}", use_container_width=True):
+                                    st.session_state[f"confirm_delete_{pid}_v{v}"] = True
                                     st.rerun()
                                     
-                            # Ask Chitti (Part 6)
-                            with ca2:
-                                if st.button("Ask Chitti", key=f"ask_{pid}_v{v}"):
-                                    st.session_state.report_data = report["report_data"]
-                                    st.session_state.project_name = report["project_name"]
-                                    st.session_state.client_name = report["client_name"]
-                                    st.session_state.project_intelligence_engine = report.get("project_intelligence_engine")
-                                    st.session_state.active_report_meta = {
-                                        "project_id": pid,
-                                        "version": v,
-                                        "generated_date": report["generated_date"],
-                                        "reporting_period": report.get("reporting_period", "")
-                                    }
-                                    if "messages" in report:
-                                        st.session_state.messages = report["messages"]
-                                    from utils import set_active_report_in_store
-                                    set_active_report_in_store(pid, v)
-                                    st.switch_page("pages/Ask_Chitti.py")
-                                    
-                            # Continue Reporting
-                            with ca3:
-                                if st.button("Continue", key=f"cont_{pid}_v{v}"):
-                                    st.session_state.project_name = report["project_name"]
-                                    st.session_state.client_name = report["client_name"]
-                                    st.session_state.previous_report_data = report["report_data"]
-                                    st.session_state.report_data = report["report_data"]
-                                    st.session_state.project_intelligence_engine = report.get("project_intelligence_engine")
-                                    st.session_state.active_report_meta = {
-                                        "project_id": pid,
-                                        "version": v,
-                                        "generated_date": report["generated_date"],
-                                        "reporting_period": report.get("reporting_period", "")
-                                    }
-                                    if "messages" in report:
-                                        st.session_state.messages = report["messages"]
-                                    st.session_state.entry_mode = "Continue From Existing Report"
-                                    
-                                    # Restore dates
-                                    if report.get("start_date"):
-                                        try:
-                                            st.session_state.custom_start_date = datetime.datetime.strptime(report["start_date"], "%Y-%m-%d").date()
-                                        except Exception:
-                                            pass
-                                    if report.get("end_date"):
-                                        try:
-                                            st.session_state.custom_end_date = datetime.datetime.strptime(report["end_date"], "%Y-%m-%d").date()
-                                        except Exception:
-                                            pass
-                                            
-                                    from utils import set_active_report_in_store
-                                    set_active_report_in_store(pid, v)
-                                    st.switch_page("pages/Dashboard.py")
-                                    
-                            # Word Export
-                            with ca4:
-                                try:
-                                    s_dt = datetime.datetime.strptime(report.get("start_date", ""), "%Y-%m-%d").date() if report.get("start_date") else None
-                                    e_dt = datetime.datetime.strptime(report.get("end_date", ""), "%Y-%m-%d").date() if report.get("end_date") else None
-                                except Exception:
-                                    s_dt = None
-                                    e_dt = None
-                                    
-                                word_data = generate_word_report(
-                                    report["project_name"],
-                                    report["client_name"],
-                                    s_dt,
-                                    e_dt,
-                                    report["report_data"],
-                                    report_version=v
-                                )
-                                safe_p = "".join(c for c in report["project_name"] if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
-                                st.download_button(
-                                    label="Word",
-                                    data=word_data,
-                                    file_name=f"{safe_p}_Report_v{v}.docx",
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                    key=f"word_{pid}_v{v}"
-                                )
-                                
-                            # Excel Export
-                            with ca5:
-                                excel_data = generate_excel_report(report["report_data"], report_version=v)
-                                st.download_button(
-                                    label="Excel",
-                                    data=excel_data,
-                                    file_name=f"{safe_p}_Timesheet_v{v}.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    key=f"excel_{pid}_v{v}"
-                                )
-                                
-                            # Delete Report
-                            with ca6:
-                                if st.session_state.get(f"confirm_delete_{pid}_v{v}"):
-                                    st.warning("Permanently delete?")
-                                    if st.button("Yes, Delete", key=f"yes_del_{pid}_v{v}", use_container_width=True):
+                        # Unified confirmation banner if delete was clicked
+                        if st.session_state.get(f"confirm_delete_{pid}_v{v}"):
+                            st.write("")
+                            with st.container(border=True):
+                                st.warning(f"Are you sure you want to permanently delete Report v{v}?")
+                                dc1, dc2 = st.columns(2)
+                                with dc1:
+                                    if st.button("Yes, Delete", key=f"yes_del_{pid}_v{v}", use_container_width=True, type="primary"):
                                         delete_report_from_store(pid, v)
                                         curr_meta = st.session_state.get("active_report_meta")
                                         if curr_meta and curr_meta["project_id"] == pid and curr_meta["version"] == v:
@@ -398,12 +415,9 @@ else:
                                         else:
                                             st.session_state[f"confirm_delete_{pid}_v{v}"] = False
                                             st.rerun()
+                                with dc2:
                                     if st.button("Cancel", key=f"cancel_del_{pid}_v{v}", use_container_width=True):
                                         st.session_state[f"confirm_delete_{pid}_v{v}"] = False
-                                        st.rerun()
-                                else:
-                                    if st.button("Delete", key=f"del_{pid}_v{v}"):
-                                        st.session_state[f"confirm_delete_{pid}_v{v}"] = True
                                         st.rerun()
                                     
                         st.write("")

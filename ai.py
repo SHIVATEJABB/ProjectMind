@@ -183,104 +183,147 @@ def extract_json(text):
     raise ValueError("No JSON object found in response.")
 
 
+def extract_reconstruction_state(text):
+    """
+    Extracts the Stage 1 project state JSON response.
+    """
+    text = text.replace("```json", "")
+    text = text.replace("```", "")
+    text = text.strip()
+    
+    start_idx = text.find("{")
+    end_idx = text.rfind("}")
+    
+    if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+        json_str = text[start_idx:end_idx + 1]
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            repaired = repair_json_string(json_str)
+            return json.loads(repaired)
+            
+    raise ValueError("No project state JSON found in Stage 1 response.")
+
+
 def analyze_project(prompt):
     """
-    Sends the prompt to OpenRouter and returns:
-    - parsed JSON
-    - raw AI response
-    If parsing fails, it automatically retries once with corrective instructions.
-    Saves raw response on success or failure for debugging.
+    Sends the prompt to OpenRouter using a model-agnostic two-stage pipeline:
+    1. Project Reconstruction: Extracts compact project state from raw evidence.
+    2. Report Writing: Formats the state into a polished, dynamic report.
     """
     total_start = time.time()
-    prompt_len = len(prompt)
-    approx_tokens = prompt_len // 4
     
-    print("\n========== ENTERED analyze_project ==========\n")
-    print(f"[AI LOG] Prompt length: {prompt_len} chars")
-
-    messages = [
-        {
-            "role": "user",
-            "content": prompt
-        }
+    # 1. Parse serialized prompt parameters
+    try:
+        params = json.loads(prompt)
+        project_name = params["project_name"]
+        client_name = params["client_name"]
+        start_date = params["start_date"]
+        end_date = params["end_date"]
+        evidence = params["project_evidence"]
+        previous_report_data = params.get("previous_report_data")
+    except Exception:
+        # Fallback if standard string is passed
+        project_name = "Project"
+        client_name = "Client"
+        start_date = ""
+        end_date = ""
+        evidence = prompt
+        previous_report_data = None
+        
+    print("\n========== ENTERED analyze_project (Model-Agnostic Two-Stage) ==========\n")
+    from prompts import build_reconstruction_prompt, build_writer_prompt
+    
+    # --- STAGE 1: Reconstruction / State Creation ---
+    reconstruction_prompt = build_reconstruction_prompt(
+        project_name, client_name, start_date, end_date, evidence, previous_report_data
+    )
+    
+    print(f"[AI LOG Stage 1] Reconstruction prompt length: {len(reconstruction_prompt)} chars")
+    
+    api_messages_1 = [
+        {"role": "user", "content": reconstruction_prompt}
     ]
-
-    api_start = time.time()
-    raw_response = ""
+    
     try:
-        response = client.chat.completions.create(
+        response_1 = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=messages,
+            messages=api_messages_1,
             temperature=0,
-            max_tokens=1800  # Limited output tokens (Part 2)
+            max_tokens=1500
         )
-        raw_response = response.choices[0].message.content
-        save_raw_response_debug(raw_response, prompt_len)
-    except Exception as api_err:
-        print(f"[ERROR] First OpenRouter API call failed: {api_err}")
-        raise RuntimeError(f"Network error or timeout calling AI: {str(api_err)}")
-
-    print("\n========== FIRST 300 CHARACTERS OF RESPONSE 1 ==========\n")
-    print(raw_response[:300])
-    print("\n=======================================================\n")
-
-    try:
-        # Check size validation: reject responses exceeding safety character limit
-        if len(raw_response) > 15000:
-            raise ValueError(f"The response was too large ({len(raw_response)} characters).")
-            
-        data = extract_json(raw_response)
-        total_duration = time.time() - total_start
-        print(f"[AI LOG] First parse succeeded in {total_duration:.3f} s")
-        return data, raw_response
+        raw_state_response = response_1.choices[0].message.content
     except Exception as e:
-        print(f"[WARNING] First parse failed or response was too large: {e}. Initiating auto-retry...")
+        print(f"[ERROR] Stage 1 API call failed: {e}")
+        raise RuntimeError(f"Network error in Stage 1 Project Reconstruction: {str(e)}")
         
-        # Save first attempt to debug log
-        save_raw_response_debug(raw_response, prompt_len)
+    try:
+        project_state = extract_reconstruction_state(raw_state_response)
+    except Exception as e:
+        print(f"[WARNING] Stage 1 parsing failed, attempting retry: {e}")
+        api_messages_1.append({"role": "assistant", "content": raw_state_response})
+        api_messages_1.append({"role": "user", "content": "The previous response was malformed or incomplete. Return ONLY a valid JSON object matching the requested completed_activities schema."})
         
-        # Prepare retry conversation with a stronger instruction to shorten
-        messages.append({
-            "role": "assistant",
-            "content": raw_response
-        })
-        messages.append({
-            "role": "user",
-            "content": "The previous response was too large, malformed, or truncated. Shorten the report. Use concise evidence references. Do not quote conversations."
-        })
-
-        retry_raw_response = ""
         try:
-            retry_response = client.chat.completions.create(
+            response_1_retry = client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=messages,
+                messages=api_messages_1,
                 temperature=0,
-                max_tokens=1800  # Limited output tokens (Part 2)
+                max_tokens=1500
             )
-            retry_raw_response = retry_response.choices[0].message.content
-            save_raw_response_debug(retry_raw_response, prompt_len)
-        except Exception as retry_api_err:
-            print(f"[ERROR] Retry API call failed: {retry_api_err}")
-            raise ValueError(f"AI returned malformed response and retry failed due to network error: {str(retry_api_err)}")
-
-        print("\n========== FIRST 300 CHARACTERS OF RETRY RESPONSE ==========\n")
-        print(retry_raw_response[:300])
-        print("\n============================================================\n")
-
-        try:                
-            data = extract_json(retry_raw_response)
-            total_duration = time.time() - total_start
-            print(f"[AI LOG] Retry parse succeeded in {total_duration:.3f} s")
-            return data, retry_raw_response
+            raw_state_response = response_1_retry.choices[0].message.content
+            project_state = extract_reconstruction_state(raw_state_response)
         except Exception as retry_err:
-            print(f"[ERROR] Retry parse failed: {retry_err}")
-            save_raw_response_debug(retry_raw_response, prompt_len)
+            print(f"[ERROR] Stage 1 retry failed: {retry_err}")
+            raise ValueError(f"Project Reconstruction failed to extract valid state: {str(retry_err)}")
             
-            # Raise detailed error message based on failure cause (Part 7)
-            err_msg = str(retry_err)
-            if "truncated" in err_msg.lower():
-                raise ValueError("The AI response exceeded the maximum length and was truncated.")
-            elif "malformed" in err_msg.lower():
-                raise ValueError("The AI returned malformed JSON after retry.")
-            else:
-                raise ValueError(f"AI generated an invalid response: {err_msg}")
+    # --- STAGE 2: Report Writing ---
+    writer_prompt = build_writer_prompt(
+        project_name, client_name, start_date, end_date, project_state
+    )
+    
+    print(f"[AI LOG Stage 2] Writer prompt length: {len(writer_prompt)} chars")
+    
+    api_messages_2 = [
+        {"role": "user", "content": writer_prompt}
+    ]
+    
+    try:
+        response_2 = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=api_messages_2,
+            temperature=0,
+            max_tokens=2500
+        )
+        raw_writer_response = response_2.choices[0].message.content
+        save_raw_response_debug(raw_writer_response, len(writer_prompt))
+    except Exception as e:
+        print(f"[ERROR] Stage 2 API call failed: {e}")
+        raise RuntimeError(f"Network error in Stage 2 Report Writing: {str(e)}")
+        
+    try:
+        data = extract_json(raw_writer_response)
+        total_duration = time.time() - total_start
+        print(f"[AI LOG] Two-stage pipeline completed in {total_duration:.3f} s")
+        return data, raw_writer_response
+    except Exception as e:
+        print(f"[WARNING] Stage 2 parsing failed, attempting retry: {e}")
+        api_messages_2.append({"role": "assistant", "content": raw_writer_response})
+        api_messages_2.append({"role": "user", "content": "The previous response was malformed or truncated. Shorten the report. Use concise formatting. Return ONLY valid JSON."})
+        
+        try:
+            response_2_retry = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=api_messages_2,
+                temperature=0,
+                max_tokens=2500
+            )
+            raw_writer_response = response_2_retry.choices[0].message.content
+            save_raw_response_debug(raw_writer_response, len(writer_prompt))
+            data = extract_json(raw_writer_response)
+            total_duration = time.time() - total_start
+            print(f"[AI LOG] Two-stage pipeline retry succeeded in {total_duration:.3f} s")
+            return data, raw_writer_response
+        except Exception as retry_err:
+            print(f"[ERROR] Stage 2 retry failed: {retry_err}")
+            raise ValueError(f"Report Generation failed to output valid JSON: {str(retry_err)}")

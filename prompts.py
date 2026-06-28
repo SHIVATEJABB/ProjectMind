@@ -54,208 +54,157 @@ def build_project_prompt(
     project_evidence,
     previous_report_data=None
 ):
+    import json
+    # Package parameters as a serialized JSON string so analyze_project can deserialize it
+    data = {
+        "project_name": project_name,
+        "client_name": client_name,
+        "start_date": str(start_date),
+        "end_date": str(end_date),
+        "project_evidence": project_evidence,
+        "previous_report_data": previous_report_data
+    }
+    return json.dumps(data)
+
+
+def build_reconstruction_prompt(
+    project_name,
+    client_name,
+    start_date,
+    end_date,
+    evidence,
+    previous_report_data=None
+):
     prev_str = format_previous_report(previous_report_data) if previous_report_data else ""
     
-    continuity_instruction = ""
-    if previous_report_data:
-        continuity_instruction = """
-11. TASK CONTINUITY:
-   * You must recognize task continuity. Do NOT duplicate tasks or delete existing tasks that have ongoing work.
-   * Compare the new PROJECT EVIDENCE with the PREVIOUS REPORT STATE.
-   * If a task from the previous report is still in progress or has additional work logged in the new project evidence, extend the task details (update its description/reasoning/evidence in "reason" and "evidence") rather than removing it or creating a new duplicate task.
-   * Update the task's "estimated_hours" by adding the new effort spent during this period to the previous cumulative hours.
-   * Ensure that ongoing tasks retain their continuity and any new progress is logged under the same task name where possible.
-   * If a previous task is completed and has no new work, keep it in the list (or move it to completed state description) to preserve the historical record of deliverables.
+    return f"""You are a precise data extraction and project state reconstruction engine. 
+Analyze the project evidence (conversations and supporting documents) and the previous report state to reconstruct the raw project state for {project_name} ({client_name}) during the period {start_date} to {end_date}.
+
+PROJECT EVIDENCE:
+{evidence}
+
+{prev_str}
+
+Extract the raw project state as a JSON object matching this schema:
+{{
+  "completed_activities": [
+    {{
+      "activity": "Brief, outcome-focused description of the completed action.",
+      "estimated_hours": 2.0,
+      "msg_ids": ["MSG_0001"]
+    }}
+  ],
+  "pending_activities": [
+    "Unresolved tasks or ongoing work items."
+  ],
+  "client_requests": [
+    "New requests or instructions raised by the client."
+  ],
+  "client_decisions": [
+    "Approvals, agreements, or choices made by the client."
+  ],
+  "risks": [
+    "Risks, blockers, or issues mentioned."
+  ]
+}}
+
+Guidelines:
+- Identify all completed tasks from the evidence. Match each completed activity to exactly 1 or 2 relevant message IDs from the evidence.
+- Identify pending work, client requests, client decisions/approvals, and risks.
+- TASK CONTINUITY: If a previous report state is provided, check if the completed activities from the evidence are extensions of previous completed/pending tasks. If so, preserve the task names, cumulative hours, and evidence mapping.
+- Return ONLY valid JSON. No comments, no backticks, no wrapping.
 """
 
-    return f"""
-You are ProjectMind.
 
-You analyze project evidence to reconstruct project work and produce professional, client-ready work completion reports.
+def build_writer_prompt(
+    project_name,
+    client_name,
+    start_date,
+    end_date,
+    project_state
+):
+    import json
+    return f"""You are a senior project manager and consultant writing a professional monthly work completion report.
+Format the provided project state into a client-ready document.
 
-Project Name:
-{project_name}
+Project Name: {project_name}
+Client Name: {client_name}
+Reporting Period: {start_date} to {end_date}
 
-Client:
-{client_name}
+PROJECT STATE:
+{json.dumps(project_state, indent=2)}
 
-Reporting Period:
-{start_date} to {end_date}
-
-----------------------------
-
-PROJECT EVIDENCE
-
-{project_evidence}
-{prev_str}
-----------------------------
-
-Please read and analyze the project evidence carefully, following these instructions:
-
-1. WORK COMPLETION REPORT FORMAT: The final "client_report" must be a professional work completion report suitable for sending directly to a paying client. It must read like a formal monthly consulting report prepared by a senior Project Manager or Consultant, NOT an AI summary or conversation log. The report must consist of EXACTLY these 7 sections in order, formatted with standard markdown headings:
-
-   ### 1. Executive Summary
-   A concise professional overview of the period. State overall progress, key achievements, and current status. Maximum 80 words.
-
-   ### 2. Completed Work & Deliverables
-   Group completed work into logical deliverables.
-
-For each deliverable include:
-• Title
-• One concise description (max 40 words)
-• Business outcome (one sentence) Use concise professional consulting language.
-Avoid unnecessary elaboration.
-
-   ### 3. Client Decisions Received
-   List explicit decisions or approvals made by the client during this period. If none, write: "No formal client decisions were recorded during this period."
-
-   ### 4. Risks & Blockers
-   Evidence-based risks only. If none, write: "No significant risks or blockers identified during this period."
-
-   ### 5. Upcoming Activities
-   List next planned activities and pending work items in priority order.
-
-   ### 6. Recommendations
-   Evidence-backed, practical next steps for the client and team.
-
-   ### 7. Closing Summary
-   One professional closing paragraph summarizing the period's progress and expressing forward momentum.
-
-2. TREAT CHAT AS EVIDENCE: Treat the conversation records strictly as source evidence from which to reconstruct the work. Extract every completed activity. Ignore greetings, small talk, scheduling messages, calendar discussions, and meeting links unless they resulted in actual discussed project outcomes. Extract only meaningful project work.
-3. DELIVERABLE CONSOLIDATION: Group and combine related activities and actions into broader, professional business deliverables.
-4. PROFESSIONAL WRITING STYLE:
-   Write using concise professional consulting language.
-   Focus on business outcomes instead of lengthy explanations.
-   Each deliverable should be clear, specific, and concise.
-   Avoid unnecessary elaboration or repetition.
-5. CONCISE DELIVERABLES:
-   Use only the minimum number of bullet points required.
-   Prefer concise summaries over detailed activity lists.
-6. AUTO-IDENTIFY SECTIONS: Identify the type of project automatically. Create appropriate section names and headings dynamically based on the project context and work performed. Do not select headers from a predefined list.
-7. NEVER REPEAT: Never repeat the same work descriptions across sections.
-8. BANNED WORDS: Never mention the word "WhatsApp" or "AI" anywhere in the final client report. Also never use any of these phrases or words: "leveraging", "it is worth noting", "it should be noted", "comprehensive", "robust", "seamless", "cutting-edge", "transformative".
-9. NO EMOJIS: Do not include emojis in any keys, values, headers, or report content.
-10. JSON COMPATIBILITY:
-   * Return ONLY valid JSON.
-   * Do NOT wrap JSON in markdown (do not output triple backticks or ```json).
-   * Escape every newline inside string values as \\n.
-   * Escape every backslash correctly (e.g. \\\\).
-   * Never output invalid escape sequences.
-   * Do NOT include comments.
-   * Do NOT include trailing commas in JSON objects or lists.
-   * Escape all double quotes inside string values (especially in the "client_report" markdown text) using standard JSON escaping.
-11. RECONSTRUCTION CONFIDENCE:
-   * The "confidence" field must be an integer (0-100) representing your confidence in this task's reconstruction.
-   * The ""confidence_reason" must be a list of 2-4 strings (bullet points) explaining the score based on specific factors (e.g. number of messages, client acknowledgement, consistency, deliverables).
-12. EVIDENCE VERIFICATION:
-   * Compare the WhatsApp evidence, supporting documents (if provided), and the generated task to set "verification_status" as:
-     - "Verified" (supporting document confirms the work described)
-     - "Partially Verified" (supporting document confirms only parts)
-     - "Contradicted" (supporting document contradicts the task)
-     - "Not Verified" (supporting document does not mention the task)
-     - "Awaiting Supporting Documents" (if no supporting document content is provided)
-13. CONCISENESS & SIZE LIMITS:
-   * project_summary: maximum 80 words.
-   * completed_tasks: maximum 4 tasks.
-   * Each completed task reason: maximum 40 words.
-   * confidence_reason: maximum 2 bullet points.
-   * evidence_ids: maximum 2 IDs.
-   * client_report: between 200 and 300 words.
-   * pending_tasks: maximum 5.
-   * new_requests: maximum 3.
-   * Never repeat the same information between sections.
-14. PROJECT INTELLIGENCE:
-   * Keep this section concise.
-   * Generate exactly 3 insights.
-   * Generate at most 2 potential risks.
-   * Generate exactly 3 recommended next steps.
-   * Each insight/risk explanation must be one sentence only.
-   * Each "why" list may contain at most 2 evidence IDs.
-15. CONSULTING STYLE:
-   * Write in the style of a senior project manager or consultant presenting to a client.
-   * Use formal but readable English. Active voice where possible.
-   * Do not use bullet lists where prose works better.
-   * Section headers must match exactly the 7 sections listed above.
-   * Client report: 200-300 words maximum.
-{continuity_instruction}
-
-IMPORTANT OUTPUT LIMIT
-
-Your entire JSON response must remain under approximately 5000 characters.
-
-If needed:
-- shorten explanations
-- reduce wording
-- summarize instead of expanding
-
-Never exceed this limit.
-
-FINAL RESPONSE LIMITS
-
-If the response is becoming too large:
-
-- Reduce wording.
-- Shorten explanations.
-- Never exceed 4 completed tasks.
-- Never exceed 300 words in client_report.
-- Prefer concise summaries over detailed narratives.
-
-Use EXACTLY this schema:
-
+Format the final response as a JSON object matching exactly this schema:
 {{
-    "project_summary": "High-level summary of the progress made during this period.",
-
+    "project_summary": "High-level summary (max 80 words) of the progress made during this period.",
     "completed_tasks": [
         {{
-            "task": "A concise description of the broader completed task/deliverable.",
+            "task": "Dynamic workstream title grouping related activities (e.g. Website Optimisation).",
             "estimated_hours": 0.0,
-            "confidence": 85,
+            "confidence": 95,
             "confidence_reason": [
-                "Task discussed across X messages",
-                "Client acknowledged completion"
+                "Task discussed across messages",
+                "Evidence matched from logs"
             ],
             "verification_status": "Awaiting Supporting Documents",
-            "reason": "Concise explanation (maximum 40 words).",
-            "evidence_ids": [
-                "MSG_0001"
-            ]
+            "reason": "Brief summary (max 40 words) describing the combined work stream.",
+            "evidence_ids": ["MSG_0001"]
         }}
     ],
-
     "pending_tasks": [
         "Description of unresolved or ongoing tasks."
     ],
-
     "new_requests": [
-        "Description of new client requirements or requests raised."
+        "Description of new client requests."
     ],
-
-    "client_report": "A complete, professional consulting-style client-ready report in markdown. Must include exactly 7 sections. Between 200 and 300 words.",
-
+    "client_report": "A complete, professional client-ready report in markdown. Read instructions below.",
     "project_intelligence": {{
         "project_health": {{
             "status": "On Track",
-            "explanation": "Brief explanation of status based on evidence."
+            "explanation": "Brief status explanation."
         }},
         "insights": [
             {{
-                "insight": "Observation statement 1.",
-                "why": [
-                    "MSG_0001"
-                ]
+                "insight": "Insight statement.",
+                "why": ["MSG_0001"]
             }}
         ],
         "potential_risks": [
             {{
-                "risk": "Risk description 1.",
-                "why": [
-                    "MSG_0002"
-                ]
+                "risk": "Risk description.",
+                "why": ["MSG_0002"]
             }}
         ],
         "recommended_next_steps": [
-            "Action recommendation 1"
+            "Action recommendation"
         ]
     }}
 }}
+
+Instructions for client_report formatting:
+- Use the title: # Project Progress Report
+- Include these sections in order:
+  ## Reporting Period: {start_date} to {end_date}
+  
+  ## Overall Progress
+  [Insert concise progress summary]
+  
+  ## Completed During This Period
+  Group the completed activities from the project state into logical workstreams. For each workstream, create a dynamic title (e.g. Website Optimisation) and write concise outcome-focused bullets. Use maximum two bullet nesting levels. Do not create empty sections.
+  
+  ## Client Decisions
+  List client decisions if present in project state. If none, do not include this section.
+  
+  ## Pending Work
+  List pending activities if present. If none, do not include.
+  
+  ## Upcoming Work
+  List upcoming tasks/new requests if present. If none, do not include.
+
+Style guidelines:
+- Outcome-focused bullets
+- Professional business English, concise and filler-free.
+- Banned words: Do NOT mention "WhatsApp" or "AI". Do not use "leveraging", "it is worth noting", "it should be noted", "comprehensive", "robust", "seamless", "cutting-edge", "transformative".
+- No emojis.
+- Return ONLY valid JSON. No comments, no backticks, no wrapping.
 """

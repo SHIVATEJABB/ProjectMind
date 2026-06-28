@@ -1,5 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="Ask Chitti", layout="wide")
+st.set_page_config(page_title="ProjectMind", page_icon="assets/favicon.png", layout="wide", initial_sidebar_state="expanded")
 
 from session import initialize_session_state
 initialize_session_state()
@@ -564,7 +564,7 @@ def ask_chitti_page():
 
     def clear_chat():
         st.session_state.chat_history = []
-        st.session_state.input_q = ""
+        st.session_state.clear_input_on_next_run = True
 
     def clear_search_callback():
         st.session_state.search_query = ""
@@ -708,31 +708,27 @@ def ask_chitti_page():
 
     st.write("")
 
-    # Chat Input Form and Action Buttons on a single row
-    chat_col, clear_col = st.columns([7.5, 2.5])
-
-    with chat_col:
-        with st.form("chat_form", clear_on_submit=False):
-            input_col, ask_col = st.columns([8, 2])
-            with input_col:
-                st.text_input(
-                    "Ask a question about this project...",
-                    placeholder="Ask anything about this project...",
-                    key="input_q",
-                    label_visibility="collapsed",
-                )
-            with ask_col:
-                ask_clicked = st.form_submit_button(
-                    "Ask", use_container_width=True, disabled=not has_report
-                )
-
-    with clear_col:
-        st.button(
-            "Clear Conversation",
-            on_click=clear_chat,
-            use_container_width=True,
-            key="clear_chat_btn"
-        )
+    # Unified Chat Input container on a single row
+    with st.form("chat_form", clear_on_submit=False):
+        input_col, ask_col, clear_col = st.columns([7, 1.5, 1.5])
+        with input_col:
+            st.text_input(
+                "Ask a question about this project...",
+                placeholder="Ask anything about this project...",
+                key="input_q",
+                label_visibility="collapsed",
+            )
+        with ask_col:
+            ask_clicked = st.form_submit_button(
+                "Ask", use_container_width=True, disabled=not has_report, type="primary"
+            )
+        with clear_col:
+            clear_clicked = st.form_submit_button(
+                "Clear", use_container_width=True, type="secondary"
+            )
+            if clear_clicked:
+                clear_chat()
+                st.rerun()
 
     # Process user query
     if ask_clicked:
@@ -759,7 +755,8 @@ def ask_chitti_page():
                     st.rerun()
                     
                 # 2. Reasoning Questions fallback
-                with st.spinner("Thinking..."):
+                status_container = st.status("Thinking...", expanded=True)
+                with status_container:
                     try:
                         # Classify user question to build context dynamically (Dynamic Context Builder)
                         q_clean = question.lower().strip()
@@ -960,6 +957,7 @@ Please use clean Markdown with headings and bullet points for your answer. Do no
                             {"role": "assistant", "content": answer}
                         )
 
+                        status_container.update(label="Response received", state="complete", expanded=False)
                         # Set clear flag to reset input_q on next run
                         st.session_state.clear_input_on_next_run = True
                         st.rerun()

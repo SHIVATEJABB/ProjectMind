@@ -1,19 +1,8 @@
-import os
 import streamlit as st
+st.set_page_config(page_title="ProjectMind", page_icon="assets/favicon.png", layout="wide", initial_sidebar_state="expanded")
 
-st.write("API exists:", os.getenv("OPENROUTER_API_KEY") is not None)
+from session import initialize_session_state
+initialize_session_state()
 
-key = os.getenv("OPENROUTER_API_KEY")
-if key:
-    st.write("Key prefix:", key[:10])
-    st.write("Key length:", len(key))
-else:
-    st.write("No API key found")
-st.set_page_config(
-    page_title="ProjectMind",
-    page_icon="assets/logo.png",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-st.sidebar.image("assets/logo.png", width=80)
-st.sidebar.markdown("## ProjectMind")
+
+st.switch_page("pages/Dashboard.py")

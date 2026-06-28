@@ -3,7 +3,9 @@ import streamlit as st
 # Page configuration
 st.set_page_config(
     page_title="ProjectMind",
-    layout="wide"
+    page_icon="assets/favicon.png",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Central Session State Initialization
@@ -200,10 +202,15 @@ if st.session_state.entry_mode == "Continue From Existing Report" and not st.ses
                     pass
             st.success(f"ProjectMind report successfully loaded: {st.session_state.project_name} v{parsed.get('version')}")
             st.rerun()
-        else:
             # Other format report
-            with st.spinner("AI is reconstructing project state from the uploaded document..."):
+            status_container = st.status("Reconstructing project state...", expanded=True)
+            with status_container:
+                progress_bar = st.progress(0.0)
+                status_container.update(label="Analyzing uploaded document...")
+                progress_bar.progress(0.5)
                 reconstructed = reconstruct_report_from_text(parsed)
+                status_container.update(label="Reconstruction complete!", state="complete", expanded=False)
+                progress_bar.progress(1.0)
                 st.session_state.project_name = reconstructed.get("project_name", "")
                 st.session_state.client_name = reconstructed.get("client_name", "")
                 st.session_state.previous_report_data = reconstructed
@@ -324,88 +331,91 @@ if st.session_state.entry_mode == "Generate New Report" or st.session_state.prev
             end_date = conversation_end
             start_date = end_date - timedelta(days=30)
         else:
-            col_start, col_end = st.columns(2)
-            with col_start:
-                default_start = st.session_state.get("custom_start_date")
-                if default_start is None or default_start < conversation_start or default_start > conversation_end:
-                    default_start = conversation_start
-                start_date = st.date_input(
-                    "Start Date",
-                    value=default_start,
-                    min_value=conversation_start,
-                    max_value=conversation_end,
-                    key="custom_start_date"
-                )
-            with col_end:
-                default_end = st.session_state.get("custom_end_date")
-                if default_end is None or default_end < conversation_start or default_end > conversation_end:
-                    default_end = conversation_end
-                end_date = st.date_input(
-                    "End Date",
-                    value=default_end,
-                    min_value=conversation_start,
-                    max_value=conversation_end,
-                    key="custom_end_date"
-                )
+            with left_col:
+                col_start, col_end = st.columns(2)
+                with col_start:
+                    default_start = st.session_state.get("custom_start_date")
+                    if default_start is None or default_start < conversation_start or default_start > conversation_end:
+                        default_start = conversation_start
+                    start_date = st.date_input(
+                        "Start Date",
+                        value=default_start,
+                        min_value=conversation_start,
+                        max_value=conversation_end,
+                        key="custom_start_date"
+                    )
+                with col_end:
+                    default_end = st.session_state.get("custom_end_date")
+                    if default_end is None or default_end < conversation_start or default_end > conversation_end:
+                        default_end = conversation_end
+                    end_date = st.date_input(
+                        "End Date",
+                        value=default_end,
+                        min_value=conversation_start,
+                        max_value=conversation_end,
+                        key="custom_end_date"
+                    )
     else:
-        st.info("Upload a WhatsApp conversation to define and validate the reporting period.")
+        with left_col:
+            st.info("Upload a WhatsApp conversation to define and validate the reporting period.")
 
-# Display conversation overview and reporting coverage inside right column if file uploaded
-if len(st.session_state.messages) > 0:
-    with right_col:
-        st.write("")
-        st.subheader("Conversation Overview")
-        m_col1, m_col2, m_col3 = st.columns(3)
-        summary = conversation_summary(st.session_state.messages)
-        conversation_start = summary["first"].date()
-        conversation_end = summary["last"].date()
-        
-        with m_col1:
-            st.metric("Messages", summary["count"])
-        with m_col2:
-            st.metric("First Message", summary["first"].strftime("%d %b %Y"))
-        with m_col3:
-            st.metric("Last Message", summary["last"].strftime("%d %b %Y"))
+    # Display conversation overview inside right column if file uploaded
+    if len(st.session_state.messages) > 0:
+        with right_col:
+            st.subheader("Conversation Overview")
+            m_col1, m_col2, m_col3 = st.columns(3)
+            summary = conversation_summary(st.session_state.messages)
+            conversation_start = summary["first"].date()
+            conversation_end = summary["last"].date()
             
-        st.caption(
-            f"Available conversation: {conversation_start.strftime('%d %b %Y')} to {conversation_end.strftime('%d %b %Y')}"
-        )
-        
-        # Conversation Coverage Card (Requirement 6)
-        st.write("")
-        st.subheader("Conversation Coverage")
-        with st.container(border=True):
-            st.write(f"**First Message:** {conversation_start.strftime('%d %b %Y')}")
-            st.write(f"**Latest Message:** {conversation_end.strftime('%d %b %Y')}")
-            st.write(f"**Today's Date:** {date.today().strftime('%d %b %Y')}")
-            
-            gap_days = (date.today() - conversation_end).days
-            if gap_days <= 0:
-                coverage_str = "Up to Date"
-                status_str = "Current"
-                status_color = "green"
-            elif gap_days == 1:
-                coverage_str = "Missing Today's Messages"
-                status_str = "Needs Updated Export"
-                status_color = "orange"
-            else:
-                coverage_str = f"Outdated by {gap_days} Days"
-                status_str = "Needs Updated Export"
-                status_color = "red"
+            with m_col1:
+                st.metric("Messages", summary["count"])
+            with m_col2:
+                st.metric("First Message", summary["first"].strftime("%d %b %Y"))
+            with m_col3:
+                st.metric("Last Message", summary["last"].strftime("%d %b %Y"))
                 
-            st.write(f"**Coverage:** {coverage_str}")
-            st.markdown(f"**Status:** <span style='color: {status_color}; font-weight: bold;'>{status_str}</span>", unsafe_allow_html=True)
-        
+            st.caption(
+                f"Available conversation: {conversation_start.strftime('%d %b %Y')} to {conversation_end.strftime('%d %b %Y')}"
+            )
+            
+            # Conversation Coverage Card (Requirement 6 - Compact)
+            st.subheader("Conversation Coverage")
+            with st.container(border=True):
+                gap_days = (date.today() - conversation_end).days
+                if gap_days <= 0:
+                    coverage_str = "Up to Date"
+                    status_str = "Current"
+                    status_color = "green"
+                elif gap_days == 1:
+                    coverage_str = "Missing Today's Messages"
+                    status_str = "Needs Updated Export"
+                    status_color = "orange"
+                else:
+                    coverage_str = f"Outdated by {gap_days} Days"
+                    status_str = "Needs Updated Export"
+                    status_color = "red"
+                    
+                freshness = "Current" if gap_days <= 0 else f"{gap_days} day(s) behind today"
+                st.markdown(
+                    f"• **First message:** {conversation_start.strftime('%d %b %Y')}  \n"
+                    f"• **Latest message:** {conversation_end.strftime('%d %b %Y')}  \n"
+                    f"• **Data freshness:** {freshness} (Today: {date.today().strftime('%d %b %Y')})  \n"
+                    f"• **Coverage status:** <span style='color: {status_color}; font-weight: 500;'>{status_str}</span> ({coverage_str})",
+                    unsafe_allow_html=True
+                )
+            
+        # Display Reporting Coverage inside left column to balance page layout heights
         if start_date and end_date:
             coverage = check_coverage(st.session_state.messages, start_date, end_date)
-            st.write("")
-            st.subheader("Reporting Coverage")
-            if coverage["status"] == "AVAILABLE":
-                st.success("Conversation data is available for the selected reporting period.")
-            elif coverage["status"] == "PARTIAL":
-                st.warning("Only part of the selected reporting period contains conversation data.")
-            else:
-                st.error("No conversation data is available for the selected reporting period.")
+            with left_col:
+                st.subheader("Reporting Coverage")
+                if coverage["status"] == "AVAILABLE":
+                    st.success("Conversation data is available for the selected reporting period.")
+                elif coverage["status"] == "PARTIAL":
+                    st.warning("Only part of the selected reporting period contains conversation data.")
+                else:
+                    st.error("No conversation data is available for the selected reporting period.")
 
 # Generate Report Section
 st.divider()
@@ -444,27 +454,33 @@ if st.button("Generate Report", use_container_width=True, disabled=generate_disa
         if coverage["status"] == "NO_DATA":
             st.error("No conversation data is available for the selected reporting period.")
         else:
-            status_container = st.status("Generating Report...", expanded=True)
+            status_container = st.status("Reading conversation...", expanded=True)
             with status_container:
+                progress_bar = st.progress(0.0)
                 try:
-                    # 1. Reading WhatsApp conversation
-                    status_container.write("Reading WhatsApp conversation")
+                    # 1. Reading conversation...
+                    progress_bar.progress(0.16)
                     whatsapp_text = ""
                     if whatsapp_file is not None:
                         whatsapp_text = read_text_file(whatsapp_file)
                     
-                    # 2. Extracting project evidence
-                    status_container.write("Extracting project evidence")
+                    # 2. Extracting activities...
+                    status_container.update(label="Extracting activities...")
+                    progress_bar.progress(0.33)
                     supporting_text = ""
                     if supporting_file is not None:
                         supporting_text = read_text_file(supporting_file)
                     
+                    # 3. Matching evidence...
+                    status_container.update(label="Matching evidence...")
+                    progress_bar.progress(0.50)
                     evidence, filtered_messages = get_combined_evidence(
                         whatsapp_text, start_date, end_date, supporting_text
                     )
                     
-                    # 3. Building project context
-                    status_container.write("Building project context")
+                    # 4. Building project intelligence...
+                    status_container.update(label="Building project intelligence...")
+                    progress_bar.progress(0.66)
                     prompt = build_project_prompt(
                         st.session_state.project_name,
                         st.session_state.client_name,
@@ -474,19 +490,20 @@ if st.button("Generate Report", use_container_width=True, disabled=generate_disa
                         previous_report_data=st.session_state.get("previous_report_data")
                     )
                     
-                    # 4. Sending request to AI
-                    status_container.write("Sending request to AI")
-                    
-                    # 5. Parsing AI response
+                    # 5. Generating report...
+                    status_container.update(label="Generating report...")
+                    progress_bar.progress(0.83)
                     report_data, raw_response = analyze_project(prompt)
-                    status_container.write("Parsing AI response")
                     
                     if not isinstance(report_data, dict):
                         st.error("AI did not return a valid report.")
                         st.stop()
                     
-                    # 6. Preparing dashboard
-                    status_container.write("Preparing dashboard")
+                    # 6. Preparing dashboard...
+                    status_container.update(label="Preparing dashboard...")
+                    progress_bar.progress(1.0)
+                    
+                    status_container.update(label="Report generated successfully!", state="complete", expanded=False)
                     
                     # Initialize review metadata and verification keys
                     report_data["review_confirmed"] = False
@@ -1015,45 +1032,50 @@ if st.session_state.report_data is not None:
             st.divider()
             st.subheader("Edit Task Times")
             import datetime
-            for idx, task_item in enumerate(comp_tasks):
+            
+            @st.dialog("Edit Task Time")
+            def show_edit_time_dialog(idx, task_item):
                 _task_name = task_item.get("task", "Unnamed Task")
                 est_hours = float(task_item.get("estimated_hours", 0.0) or 0.0)
                 original_ai_hours = float(task_item.get("original_ai_hours", est_hours) or est_hours)
-
-                with st.expander(f"{_task_name} — {format_duration(est_hours)}"):
-                    st.markdown(f"**Current Estimated Time:** {format_duration(est_hours)}")
-                    st.markdown(f"**Original AI Estimate:** {format_duration(original_ai_hours)}")
-
-                    _h_default = int(est_hours)
-                    _m_default = round((est_hours - _h_default) * 60)
-                    _m_default = (_m_default // 5) * 5  # snap to nearest 5
-                    if _m_default not in list(range(0, 60, 5)):
-                        _m_default = 0
-
-                    te_col1, te_col2 = st.columns(2)
-                    with te_col1:
-                        new_h = st.number_input(
-                            "Hours",
-                            min_value=0,
-                            max_value=999,
-                            value=_h_default,
-                            step=1,
-                            key=f"te_hours_{idx}"
-                        )
-                    with te_col2:
-                        new_m = st.selectbox(
-                            "Minutes",
-                            options=list(range(0, 60, 5)),
-                            index=list(range(0, 60, 5)).index(_m_default) if _m_default in list(range(0, 60, 5)) else 0,
-                            key=f"te_minutes_{idx}"
-                        )
-                    reason_val = st.text_input(
-                        "Reason for change (optional)",
-                        value="",
-                        key=f"te_reason_{idx}"
+                
+                st.markdown(f"**Task Name:** {_task_name}")
+                st.markdown(f"**Original AI Estimate:** {format_duration(original_ai_hours)}")
+                st.markdown(f"**Current Estimated Time:** {format_duration(est_hours)}")
+                
+                _h_default = int(est_hours)
+                _m_default = round((est_hours - _h_default) * 60)
+                _m_default = (_m_default // 5) * 5
+                if _m_default not in list(range(0, 60, 5)):
+                    _m_default = 0
+                
+                te_col1, te_col2 = st.columns(2)
+                with te_col1:
+                    new_h = st.number_input(
+                        "Hours",
+                        min_value=0,
+                        max_value=999,
+                        value=_h_default,
+                        step=1,
+                        key=f"te_dlg_hours_{idx}"
                     )
-
-                    if st.button("Save Time Change", key=f"save_time_{idx}"):
+                with te_col2:
+                    new_m = st.selectbox(
+                        "Minutes",
+                        options=list(range(0, 60, 5)),
+                        index=list(range(0, 60, 5)).index(_m_default) if _m_default in list(range(0, 60, 5)) else 0,
+                        key=f"te_dlg_minutes_{idx}"
+                    )
+                reason_val = st.text_input(
+                    "Reason for change (optional)",
+                    value="",
+                    key=f"te_dlg_reason_{idx}"
+                )
+                
+                st.write("")
+                d_col1, d_col2, d_col3 = st.columns(3)
+                with d_col1:
+                    if st.button("Save", key=f"dlg_save_btn_{idx}", type="primary", use_container_width=True):
                         new_decimal_hours = new_h + new_m / 60.0
                         task_item["estimated_hours"] = new_decimal_hours
                         if "time_history" not in task_item:
@@ -1070,20 +1092,39 @@ if st.session_state.report_data is not None:
                             update_report_in_store(meta["project_id"], meta["version"], st.session_state.report_data)
                         st.success("Time updated.")
                         st.rerun()
-
-                    # Time History
-                    _hist = task_item.get("time_history", [])
-                    if _hist:
-                        with st.expander("Time History"):
-                            for _he in _hist:
-                                _he_ts = _he.get("timestamp", "")
-                                _he_h = _he.get("hours", 0.0)
-                                _he_ed = _he.get("editor", "")
-                                _he_r = _he.get("reason", "")
-                                st.markdown(
-                                    f"- **{format_duration(_he_h)}** by *{_he_ed}* on `{_he_ts[:19]}` — {_he_r}"
-                                )
-                            
+                with d_col2:
+                    if st.button("Cancel", key=f"dlg_cancel_btn_{idx}", use_container_width=True):
+                        st.rerun()
+                with d_col3:
+                    if st.button("Close", key=f"dlg_close_btn_{idx}", use_container_width=True):
+                        st.rerun()
+                
+                # Time History inside the dialog
+                _hist = task_item.get("time_history", [])
+                if _hist:
+                    st.divider()
+                    st.markdown("**Time History**")
+                    for _he in _hist:
+                        _he_ts = _he.get("timestamp", "")
+                        _he_h = _he.get("hours", 0.0)
+                        _he_ed = _he.get("editor", "")
+                        _he_r = _he.get("reason", "")
+                        st.markdown(
+                            f"- **{format_duration(_he_h)}** by *{_he_ed}* on `{_he_ts[:19]}` — {_he_r}"
+                        )
+            
+            # Render task list with trigger buttons
+            for idx, task_item in enumerate(comp_tasks):
+                _task_name = task_item.get("task", "Unnamed Task")
+                est_hours = float(task_item.get("estimated_hours", 0.0) or 0.0)
+                
+                t_row_col1, t_row_col2 = st.columns([7.5, 2.5])
+                with t_row_col1:
+                    st.markdown(f"**{_task_name}** ({format_duration(est_hours)})")
+                with t_row_col2:
+                    if st.button("Edit Time", key=f"edit_time_trigger_{idx}", use_container_width=True):
+                        show_edit_time_dialog(idx, task_item)
+                        
         st.divider()
         st.subheader("Pending Tasks")
         if not pend_tasks:
