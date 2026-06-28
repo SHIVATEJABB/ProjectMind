@@ -9,3 +9,9 @@ if key:
     st.write("Key length:", len(key))
 else:
     st.write("No API key found")
+st.set_page_config(
+    page_title="ProjectMind",
+    page_icon="assets/logo.png",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
