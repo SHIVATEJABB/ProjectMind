@@ -54,17 +54,88 @@ def is_meaningful_message(text):
     return True
 
 
+def parse_whatsapp_datetime(date_str, time_str):
+    import datetime as dt_module
+    import re
+    # 1. Parse time
+    time_str = re.sub(r'\s+', ' ', time_str.strip().upper())
+    has_ampm = "AM" in time_str or "PM" in time_str
+    
+    time_formats = []
+    if has_ampm:
+        time_formats = ["%I:%M:%S %p", "%I:%M %p", "%H:%M:%S %p", "%H:%M %p"]
+    else:
+        time_formats = ["%H:%M:%S", "%H:%M"]
+        
+    time_obj = None
+    for tf in time_formats:
+        try:
+            time_obj = dt_module.datetime.strptime(time_str, tf).time()
+            break
+        except ValueError:
+            pass
+            
+    if not time_obj:
+        return None
+        
+    # 2. Parse date
+    sep_match = re.search(r'[/\.-]', date_str)
+    if not sep_match:
+        return None
+    sep = sep_match.group(0)
+    parts = date_str.split(sep)
+    if len(parts) != 3:
+        return None
+        
+    p0, p1, p2 = parts
+    if len(p0) == 4:
+        date_formats = [f"%Y{sep}%m{sep}%d", f"%Y{sep}%d{sep}%m"]
+    else:
+        year_fmt = "%Y" if len(p2) == 4 else "%y"
+        date_formats = [
+            f"%d{sep}%m{sep}{year_fmt}",
+            f"%m{sep}%d{sep}{year_fmt}",
+            f"%y{sep}%m{sep}%d"
+        ]
+        
+    date_obj = None
+    for df in date_formats:
+        try:
+            date_obj = dt_module.datetime.strptime(date_str, df).date()
+            break
+        except ValueError:
+            pass
+            
+    if not date_obj:
+        return None
+        
+    return dt_module.datetime.combine(date_obj, time_obj)
+
+
 @st.cache_data
 def extract_messages(chat_text):
     """
-    Extracts WhatsApp messages matching the timestamp pattern and filters/deduplicates them.
-    Supports: [22/08/25, 12:58:57 PM] Name: Message
+    Extracts WhatsApp messages by dynamically detecting different export header formats
+    (such as iOS bracketed and Android/unbracketed style) and parsing varying formats.
     """
-    pattern = r"\[(\d{2}/\d{2}/\d{2}),\s(\d{1,2}:\d{2}:\d{2}\s(?:AM|PM))\]\s"
-    matches = list(re.finditer(pattern, chat_text))
+    import re
+    
+    # Format 1 (iOS style): [22/08/25, 12:58:57 PM] Name: Message
+    pattern_ios = re.compile(r"^\[(\d{1,4}[/\.-]\d{1,2}[/\.-]\d{1,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?)\]", re.MULTILINE)
+    
+    # Format 2 (Android style): 26/11/2025, 12:38 - Name: Message
+    pattern_android = re.compile(r"^(\d{1,4}[/\.-]\d{1,2}[/\.-]\d{1,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?)\s*-\s*", re.MULTILINE)
+    
+    matches = list(pattern_ios.finditer(chat_text))
+    if len(matches) < 2:
+        matches = list(pattern_android.finditer(chat_text))
+        
+    if not matches:
+        return []
+        
     messages = []
     seen_bodies = set()
-
+    
     for i, match in enumerate(matches):
         start = match.start()
         end = (
@@ -73,44 +144,35 @@ def extract_messages(chat_text):
             else len(chat_text)
         )
         block = chat_text[start:end].strip()
-
+        
         date_str = match.group(1)
         time_str = match.group(2)
-
-        try:
-            dt = datetime.strptime(
-                f"{date_str} {time_str}",
-                "%d/%m/%y %I:%M:%S %p"
-            )
-        except Exception:
+        
+        dt = parse_whatsapp_datetime(date_str, time_str)
+        if dt is None:
             continue
-
-        # Extract message body to filter and deduplicate
-        # e.g., block is: "[22/08/25, 12:58:57 PM] Name: Message content..."
-        bracket_idx = block.find("]")
-        if bracket_idx != -1:
-            after_bracket = block[bracket_idx + 1:].strip()
-            colon_idx = after_bracket.find(":")
-            if colon_idx != -1:
-                msg_sender = after_bracket[:colon_idx].strip()
-                msg_body = after_bracket[colon_idx + 1:].strip()
-            else:
-                msg_sender = "System"
-                msg_body = after_bracket
+            
+        header_len = match.end() - match.start()
+        after_header = block[header_len:].strip()
+        
+        colon_idx = after_header.find(":")
+        if colon_idx != -1:
+            msg_sender = after_header[:colon_idx].strip()
+            msg_body = after_header[colon_idx + 1:].strip()
         else:
             msg_sender = "System"
-            msg_body = block
-
+            msg_body = after_header
+            
         # Filter out meaningless messages
         if not is_meaningful_message(msg_body):
             continue
-
+            
         # Deduplicate identical message bodies
         body_lower = msg_body.lower()
         if body_lower in seen_bodies:
             continue
         seen_bodies.add(body_lower)
-
+        
         msg_id = f"MSG_{len(messages) + 1:04d}"
         messages.append({
             "id": msg_id,
@@ -119,7 +181,7 @@ def extract_messages(chat_text):
             "sender": msg_sender,
             "body": msg_body
         })
-
+        
     return messages
 
 
