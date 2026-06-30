@@ -245,6 +245,7 @@ if st.session_state.entry_mode == "Generate New Report" or st.session_state.prev
             try:
                 whatsapp_text = read_text_file(whatsapp_file)
                 st.session_state.messages = extract_messages(whatsapp_text)
+                st.write("Messages parsed:", len(st.session_state.messages))
                 # Reset state for new file
                 st.session_state.report_data = None
                 st.session_state.raw_response = ""
